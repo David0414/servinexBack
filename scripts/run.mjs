@@ -12,8 +12,7 @@ const dev =
     : [
         "node_modules/tsx/dist/cli.mjs",
         "watch",
-        "--include",
-        ".env",
+        "--clear-screen=false",
         "src/server.ts",
       ];
 const tasks = {
@@ -43,5 +42,10 @@ if (!Object.hasOwn(tasks, mode)) {
   console.error("Comando desconocido para Back.");
   process.exitCode = 1;
 } else {
-  await run(root, tasks[mode]);
+  await run(root, tasks[mode], {
+    watchEnv:
+      mode === "dev" &&
+      process.platform !== "win32" &&
+      process.platform !== "darwin",
+  });
 }
