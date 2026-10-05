@@ -1,0 +1,679 @@
+SERVINEX   |   Especificacion funcional y tecnica
+Documento para desarrollo - MVP internoPagina 1
+SERVINEX  /  PLATFORM
+Especificacion funcional y tecnica de plataforma 
+interna
+Servinex OPS + Partner Link
+MVP v1.0  |  Octubre 2026
+OBJETIVO DEL DOCUMENTO
+Entregar al desarrollador una especificacion completa, accionable y sin ambiguedades para construir el 
+sistema interno de Servinex. El cliente final NO usa la plataforma. El proveedor recibe por WhatsApp una 
+liga segura para aceptar un servicio, ejecutar el trabajo y entregar evidencia.
+DECISION CLAVE
+Una sola plataforma web. El personal interno entra a Servinex OPS con autenticacion. El proveedor no 
+requiere cuenta ni instala una app en el MVP: entra por una liga privada asociada a cada servicio.
+Stack acordado: React + Vite + TypeScript / Vercel / Railway / Supabase
+SERVINEX   |   Especificacion funcional y tecnica
+Documento para desarrollo - MVP internoPagina 2
+Contenido
+1. Vision y limites del producto
+2. Arquitectura general
+3. Stack tecnico y responsabilidades
+4. Roles, accesos y proteccion de datos
+5. Flujo operativo end-to-end
+6. Servinex OPS - modulo interno
+7. Partner Link - experiencia del proveedor
+8. WhatsApp sin API
+9. Modelo de datos
+10. Estados y reglas de negocio
+11. API y contratos
+12. Evidencias y almacenamiento
+13. Finanzas y pago a proveedor
+14. Seguridad y prevencion de fuga de clientes
+15. UX/UI y pantallas
+16. Estructura del repositorio
+17. Variables, despliegue y dominios
+18. QA, criterios de aceptacion y Definition of Done
+19. Plan de construccion del MVP
+20. Fase 2 / escalabilidad
+Anexos: mensajes, payloads y checklist de entrega
+SERVINEX   |   Especificacion funcional y tecnica
+Documento para desarrollo - MVP internoPagina 3
+1. Vision y limites del producto
+Servinex debe operar como una empresa de servicios tecnicos con una capa tecnologica interna. La plataforma 
+no pretende convertir el negocio en un marketplace publico ni obligar al cliente a registrarse. Su funcion es 
+controlar la operacion, estandarizar al proveedor, reducir la exposicion de datos del cliente y dejar evidencia 
+trazable de cada servicio.
+1.1 Objetivos del MVP
+ Capturar internamente cada solicitud recibida por WhatsApp, llamada o publicidad.
+ Crear una orden de servicio con folio unico y datos comerciales separados de los datos que ve el proveedor.
+ Asignar un proveedor y generar una liga privada del servicio.
+ Generar automaticamente un mensaje listo para copiar y enviar manualmente por WhatsApp.
+ Permitir que el proveedor acepte o rechace con el minimo numero de pasos.
+ Permitir que el proveedor marque avance y entregue un reporte con evidencia fotografica.
+ Permitir que OPS revise, cierre el servicio y registre el pago al proveedor.
+ Mantener auditoria de cambios y minimizar la fuga de datos/clientes.
+1.2 Fuera de alcance del MVP
+ Portal, cuenta o aplicacion para el cliente final.
+ WhatsApp Cloud API, bots, automatizaciones oficiales de Meta o chatbot.
+ Cobro en linea al cliente dentro de la plataforma.
+ GPS en tiempo real del proveedor.
+ App nativa iOS/Android.
+ Marketplace publico donde los proveedores compiten por clientes.
+ Facturacion fiscal automatica o integracion contable.
+ IA para diagnostico o asignacion automatica en la primera version.
+PRINCIPIO DE PRODUCTO
+El proveedor debe poder completar todo desde el navegador de su telefono. No debe instalar nada, crear 
+una contrasena ni aprender un sistema complejo para el MVP.
+2. Arquitectura general
+La aplicacion web se publica en Vercel. Toda regla de negocio sensible pasa por una API propia desplegada en Railway. 
+Supabase funciona como base de datos PostgreSQL, autenticacion del personal interno y almacenamiento privado de evidencias. 
+El proveedor accede al mismo frontend mediante una ruta especial que recibe un token de asignacion.
+SERVINEX   |   Especificacion funcional y tecnica
+Documento para desarrollo - MVP internoPagina 4
+2.1 Dominios recomendados
+Componente Dominio / servicio Uso
+Frontend app.servinex.mx (Vercel) OPS y Partner Link en una sola 
+aplicacion.
+API api.servinex.mx (Railway) Reglas de negocio, tokens, permisos y 
+acceso a Supabase.
+Base de datos Supabase Postgres Datos operativos y financieros.
+Auth Supabase Auth Solo usuarios internos de OPS.
+Evidencias Supabase Storage Buckets privados; acceso por URLs 
+firmadas.
+3. Stack tecnico y responsabilidades
+Capa Tecnologia Responsabilidad
+Frontend React 19 + Vite + TypeScript UI SPA, rutas, formularios, estados 
+visuales, carga de fotos.
+Routing React Router /login, /ops/* y /p/:token.
+Data fetching TanStack Query Cache, invalidacion y estados de 
+peticiones.
+UI Tailwind CSS + componentes 
+accesibles
+Interfaz consistente, responsive y 
+mobile-first.
+Validacion Zod Schemas compartidos en 
+frontend/backend.
+Backend Node.js + TypeScript + Fastify API REST, reglas, seguridad, tokens y 
+auditoria.
+DB/Auth/Storage Supabase Postgres, Auth para staff y Storage 
+privado.
+Hosting frontend Vercel Deploy del SPA y dominio 
+app.servinex.mx.
+Hosting backend Railway Deploy API, logs, variables y procesos 
+programados futuros.
+SERVINEX   |   Especificacion funcional y tecnica
+Documento para desarrollo - MVP internoPagina 5
+REGLA TECNICA
+La SUPABASE_SERVICE_ROLE_KEY nunca debe existir en el frontend ni en Vercel como variable publica. 
+Solo Railway puede usarla. El navegador trabaja contra la API de Servinex y, para archivos, con URLs 
+firmadas temporales.
+3.1 Por que Railway si Supabase ya tiene backend
+Railway se conserva como capa de negocio porque el flujo necesita reglas que no deben quedar dispersas en el 
+navegador: generacion y revocacion de tokens, ocultamiento de campos, cambios de estado permitidos, calculos 
+de margen, auditoria, validaciones y permisos. Supabase queda como infraestructura de datos, no como 
+sustituto de la API de negocio.
+4. Roles, accesos y proteccion de datos
+Rol Autenticacion Puede ver No puede ver
+Admin / Owner Supabase Auth Todo: clientes, precios, 
+margenes, proveedores, 
+reportes, pagos, auditoria.
+N/A
+Operador OPS Supabase Auth Servicios, datos necesarios 
+del cliente, asignaciones, 
+evidencias.
+Configuracion critica o 
+finanzas si se restringe por 
+rol.
+Proveedor MVP Token seguro por servicio Su orden, pago acordado, 
+datos operativos necesarios, 
+formulario de evidencia.
+Cartera de clientes, telefono 
+del cliente por defecto, 
+precio de venta, margen, 
+otros proveedores, otros 
+servicios.
+5. Flujo operativo end-to-end
+1. Captura: El cliente escribe o llama. OPS registra manualmente nombre, telefono, zona, direccion, tipo de 
+servicio, descripcion, fecha y precio al cliente.
+SERVINEX   |   Especificacion funcional y tecnica
+Documento para desarrollo - MVP internoPagina 6
+2. Asignacion: OPS selecciona al proveedor. En el inicio habra uno, pero el modelo debe permitir varios sin 
+rediseñar la base.
+3. Oferta: El sistema registra el pago ofrecido al proveedor, genera token seguro, liga privada y mensaje de 
+WhatsApp.
+4. Aceptacion: El proveedor abre la liga y ve un resumen minimo: folio, servicio, zona, horario y pago. Acepta o 
+rechaza.
+5. Ejecucion: Al aceptar, se habilitan los datos operativos necesarios. El proveedor puede marcar En camino y 
+En sitio/Iniciar servicio.
+6. Reporte: El proveedor carga fotos de antes y despues, trabajo realizado y materiales/observaciones. Envia el 
+reporte.
+7. Revision: OPS revisa evidencia. Si cumple, cierra el servicio y habilita/registre el pago al proveedor.
+8. Archivo: La liga del proveedor se revoca al cerrar/cancelar. Evidencia y auditoria quedan disponibles 
+internamente.
+6. Servinex OPS - modulo interno
+6.1 Dashboard
+ KPIs: servicios nuevos, asignados, en proceso, por revisar, cerrados.
+ Facturacion bruta del periodo, pagos a proveedores y margen bruto estimado.
+ Lista de servicios que requieren accion: sin asignar, oferta sin respuesta, reporte pendiente, revision pendiente.
+ Filtros por fecha, proveedor, tipo de servicio y estado.
+6.2 Crear servicio
+Campo Tipo / regla Visibilidad proveedor
+Folio Autogenerado: SVX-YYYY-000001 Si
+Cliente Nombre completo o razon social No por defecto; mostrar solo nombre 
+corto si hace falta
+Telefono cliente E.164 / texto validado No
+Tipo de servicio Catalogo: plomeria, drenaje, 
+fumigacion, etc.
+Si
+Descripcion Texto operativo Si, depurado de datos comerciales
+Zona Colonia/municipio Si antes de aceptar
+Direccion exacta Texto / coordenadas opcionales Solo despues de aceptar
+Fecha/hora Programada o ASAP Si
+Precio cliente Moneda MXN No
+Pago proveedor Moneda MXN Si
+SERVINEX   |   Especificacion funcional y tecnica
+Documento para desarrollo - MVP internoPagina 7
+Campo Tipo / regla Visibilidad proveedor
+Notas internas Texto libre Nunca
+6.3 Detalle de servicio en OPS
+ Encabezado con folio, estado actual y botones de accion permitidos.
+ Bloque Cliente: datos de contacto y direccion.
+ Bloque Comercial: precio cliente, pago proveedor, costos adicionales y margen.
+ Bloque Proveedor: asignacion actual, hora de envio, aceptacion y avance.
+ Timeline de eventos: creado, asignado, mensaje generado, aceptado, estados, reporte, revision, cierre.
+ Galeria privada de evidencias y reporte.
+ Acciones: reasignar, cancelar, regenerar liga, copiar WhatsApp, aprobar reporte, marcar pago.
+6.4 Proveedores
+Dato Descripcion
+Identificacion Nombre, telefono, correo opcional, estatus activo/inactivo.
+Servicios Especialidades que puede realizar.
+Cobertura Zonas o municipios que atiende.
+Tarifas/notas Referencia interna; no es motor automatico en MVP.
+Pago Datos internos para transferencia; proteger con permisos.
+Metricas Aceptados, rechazados, completados, cancelados, promedio 
+de respuesta.
+7. Partner Link - experiencia del proveedor
+META DE UX
+Un proveedor que nunca ha usado la plataforma debe entenderla sin capacitacion. Botones grandes, una 
+accion principal por pantalla y cero menus complejos.
+7.1 Acceso sin cuenta en el MVP
+El proveedor recibe una liga como https://app.servinex.mx/p/<TOKEN>. No inicia sesion. El token identifica 
+exclusivamente la asignacion y sirve como credencial temporal. La API valida el hash del token, expiracion, 
+estado y revocacion antes de devolver cualquier dato.
+SERVINEX   |   Especificacion funcional y tecnica
+Documento para desarrollo - MVP internoPagina 8
+7.2 Pantallas del proveedor
+Pantalla Contenido Accion principal
+Oferta Folio, servicio, zona, fecha/hora, pago 
+al proveedor. Sin telefono ni direccion 
+exacta.
+Aceptar / Rechazar
+Servicio aceptado Direccion exacta, notas operativas, 
+boton abrir mapa, contacto Servinex.
+Marcar En camino
+Llegada Resumen del servicio y reglas de 
+evidencia.
+Estoy en sitio / Iniciar servicio
+Reporte Fotos antes, diagnostico/trabajo, 
+materiales/observaciones, fotos 
+despues.
+Enviar reporte
+Confirmacion Mensaje de reporte recibido y folio. Cerrar
+7.3 Formulario de reporte obligatorio
+ Foto(s) antes: minimo 1, maximo recomendado 5.
+ Trabajo realizado: obligatorio, 10 a 1,000 caracteres.
+ Materiales utilizados: opcional en MVP; campo libre.
+ Observaciones: opcional.
+ Foto(s) despues: minimo 1, maximo recomendado 5.
+ Checkbox: "Confirmo que la evidencia corresponde al servicio realizado".
+ Boton unico: Enviar reporte. Deshabilitar mientras sube para evitar duplicados.
+NO PEDIR AL PROVEEDOR
+No solicitar datos que OPS ya conoce: nombre del cliente, telefono, precio vendido, margen o datos 
+administrativos. El reporte debe tomar menos de 2 minutos en condiciones normales.
+8. WhatsApp sin API
+No se integrara WhatsApp Cloud API. El sistema solo genera el texto y la liga. El envio lo realiza una persona 
+desde WhatsApp o WhatsApp Web. Esto reduce complejidad, costos y riesgo durante la validacion del negocio.
+8.1 Botones en OPS
+ Copiar mensaje: copia al portapapeles el texto completo.
+ Abrir WhatsApp: usa un deep link wa.me con telefono del proveedor y texto URL-encoded. No envia 
+automaticamente.
+ Regenerar liga: revoca el token anterior y crea uno nuevo; registrar evento de auditoria.
+8.2 Mensaje principal listo para enviar
+SERVINEX | NUEVO SERVICIO
+SERVINEX   |   Especificacion funcional y tecnica
+Documento para desarrollo - MVP internoPagina 9
+Hola, Carlos. Tienes un nuevo servicio disponible.
+Folio: SVX-2026-000184
+Servicio: Plomeria - fuga bajo lavabo
+Zona: Juriquilla, Queretaro
+Fecha / hora: Hoy, 14:30
+Pago por servicio: $650 MXN
+Revisa y acepta el servicio aqui:
+https://app.servinex.mx/p/7Vx...token...Q2
+Dentro de la liga podras aceptar el servicio, consultar los datos operativos y entregar tu evidencia 
+al finalizar.
+Por seguridad, no compartas esta liga.
+IMPORTANTE
+La liga contiene una credencial. Nunca incluir el telefono del cliente en el texto de WhatsApp. Si el 
+proveedor necesita contactar a alguien, el punto de contacto por defecto debe ser Servinex.
+9. Modelo de datos
+Usar UUID como primary key. El folio visible es un identificador comercial independiente. Evitar IDs 
+secuenciales expuestos en URLs. Todas las fechas deben almacenarse en UTC con timestamptz y mostrarse en 
+zona horaria configurada por la aplicacion.
+Tabla Proposito Campos clave
+staff_profiles Perfil del usuario interno ligado a 
+auth.users.
+id, auth_user_id, name, role, active, 
+created_at
+providers Catalogo de proveedores. id, name, phone, email, status, notes, 
+payout_data_encrypted/ref, created_at
+provider_service_types Especialidades por proveedor. provider_id, service_type_id, active
+service_types Catalogo de servicios. id, name, code, active
+customers Cliente interno. id, name, phone, email, company_name, 
+notes, created_at
+service_orders Entidad principal del servicio. id, folio, customer_id, service_type_id, 
+description, zone, address, scheduled_at, 
+customer_price, internal_notes, status, 
+created_by, created_at
+service_assignments Relacion servicio-proveedor. id, service_order_id, provider_id, 
+provider_payout, status, assigned_at, 
+accepted_at, completed_at
+assignment_access_tokens Credenciales temporales de proveedor. id, assignment_id, token_hash, 
+SERVINEX   |   Especificacion funcional y tecnica
+Documento para desarrollo - MVP internoPagina 10
+Tabla Proposito Campos clave
+expires_at, revoked_at, created_at
+service_events Timeline inmutable. id, service_order_id, actor_type, 
+actor_id/provider_id, event_type, 
+payload_json, created_at
+service_reports Reporte final. id, assignment_id, work_done, materials, 
+observations, submitted_at, 
+review_status, reviewed_by, reviewed_at
+service_evidence Metadatos de fotos. id, report_id, kind(before/after), 
+storage_path, mime_type, size_bytes, 
+created_at
+provider_payments Control de pago. id, assignment_id, amount, status, 
+approved_at, paid_at, payment_reference
+audit_logs Cambios sensibles de OPS. id, staff_id, action, entity_type, entity_id, 
+before_json, after_json, created_at
+9.1 Indices recomendados
+ UNIQUE(service_orders.folio).
+ INDEX(service_orders.status, created_at DESC).
+ INDEX(service_assignments.provider_id, status).
+ INDEX(service_events.service_order_id, created_at).
+ UNIQUE activo sobre assignment_access_tokens por assignment si el diseño lo permite.
+ INDEX(provider_payments.status, created_at).
+10. Estados y reglas de negocio
+Estado interno Quien lo provoca Regla
+NEW OPS Servicio creado; aun sin proveedor.
+ASSIGNED OPS Existe una asignacion activa.
+OFFER_SENT OPS Se genero/enviara la liga; registrar 
+timestamp.
+ACCEPTED Proveedor Solo si token es valido y asignacion 
+sigue disponible.
+IN_ROUTE Proveedor Solo despues de ACCEPTED.
+IN_PROGRESS Proveedor Solo despues de ACCEPTED/IN_ROUTE.
+REPORT_SUBMITTED Proveedor Solo si existen campos y evidencias 
+SERVINEX   |   Especificacion funcional y tecnica
+Documento para desarrollo - MVP internoPagina 11
+Estado interno Quien lo provoca Regla
+minimas.
+UNDER_REVIEW Sistema/OPS Puede ser alias visual de reporte 
+pendiente.
+CLOSED OPS Reporte aprobado; servicio finalizado.
+CANCELLED OPS Revocar tokens activos.
+REJECTED Proveedor Permite reasignar; revocar token.
+10.1 Reglas criticas
+ Nunca permitir dos asignaciones activas aceptadas para el mismo servicio en el MVP.
+ Si se reasigna, revocar inmediatamente el token anterior.
+ El proveedor no puede editar un reporte despues de enviado; OPS puede devolverlo a correccion en una fase 
+posterior. En MVP, OPS puede pedir correccion por WhatsApp y reabrir manualmente.
+ Cerrar servicio revoca acceso del proveedor despues de una ventana configurable (recomendado: inmediato o 24 
+h).
+ El margen se calcula en backend. No confiar en valores enviados por el navegador.
+11. API y contratos
+Prefijo recomendado: /api/v1. Todo endpoint OPS exige Authorization: Bearer <Supabase JWT>. Los endpoints 
+/partner/* usan el token de asignacion y nunca aceptan un ID de proveedor libre enviado por el navegador.
+11.1 Endpoints OPS
+Metodo Ruta Uso
+POST /services Crear servicio.
+GET /services Listar con filtros/paginacion.
+GET /services/:id Detalle completo OPS.
+PATCH /services/:id Editar campos permitidos.
+POST /services/:id/assignments Asignar proveedor y payout.
+POST /assignments/:id/access-link Generar/revocar token y devolver URL.
+POST /assignments/:id/whatsapp-message Generar texto listo para enviar.
+POST /services/:id/cancel Cancelar y revocar accesos.
+POST /reports/:id/approve Aprobar reporte.
+SERVINEX   |   Especificacion funcional y tecnica
+Documento para desarrollo - MVP internoPagina 12
+Metodo Ruta Uso
+POST /provider-payments Crear/actualizar pago.
+GET /providers Listar proveedores.
+11.2 Endpoints Partner
+Metodo Ruta Uso
+GET /partner/job/:token Resumen seguro segun estado.
+POST /partner/job/:token/accept Aceptar oferta.
+POST /partner/job/:token/reject Rechazar oferta.
+POST /partner/job/:token/status Cambiar a IN_ROUTE / IN_PROGRESS.
+POST /partner/job/:token/uploads Solicitar signed upload URLs.
+POST /partner/job/:token/report Enviar reporte final con paths de 
+evidencias.
+11.3 Ejemplo de respuesta ANTES de aceptar
+{
+  "folio": "SVX-2026-000184",
+  "status": "OFFER_SENT",
+  "serviceType": "Plomeria",
+  "description": "Fuga bajo lavabo",
+  "zone": "Juriquilla, Queretaro",
+  "scheduledAt": "2026-10-04T20:30:00Z",
+  "providerPayout": 650,
+  "currency": "MXN"
+}
+11.4 Ejemplo DESPUES de aceptar
+{
+  "folio": "SVX-2026-000184",
+  "status": "ACCEPTED",
+  "serviceType": "Plomeria",
+  "description": "Fuga bajo lavabo",
+  "address": "Direccion operativa necesaria",
+  "mapUrl": "https://www.google.com/maps/search/?api=1&query=...",
+  "servinexContact": "+52...",
+  "providerPayout": 650,
+  "currency": "MXN"
+}
+SERVINEX   |   Especificacion funcional y tecnica
+Documento para desarrollo - MVP internoPagina 13
+12. Evidencias y almacenamiento
+ Bucket privado: service-evidence. No public bucket.
+ Path sugerido: service-evidence/<service_uuid>/<assignment_uuid>/<report_uuid>/<before|after>/<uuid>.webp.
+ Frontend comprime imagen antes de subir: maximo objetivo 1600-2000 px en lado largo, calidad 0.75-0.85.
+ Recodificar imagen en el navegador para reducir peso y eliminar metadatos EXIF innecesarios.
+ Backend genera URL de carga firmada temporal. El proveedor no recibe claves de Supabase.
+ Validar MIME permitido: image/jpeg, image/png, image/webp. Rechazar ejecutables y archivos arbitrarios.
+ Limite sugerido: 8 MB por archivo antes de compresion; la UI debe advertir y comprimir.
+ OPS obtiene URL de lectura firmada de corta duracion cuando abre la galeria.
+12.1 Integridad de evidencia
+La fecha valida del sistema debe ser la hora de recepcion del backend, no la fecha EXIF de la foto. Registrar 
+service_event por cada envio de reporte. En el MVP no es necesario geolocalizar la foto.
+13. Finanzas y pago a proveedor
+El objetivo no es crear contabilidad completa, sino evitar perder control del margen y de lo que se debe a cada 
+proveedor.
+Campo Regla
+Precio cliente Visible solo OPS; capturado al crear/editar servicio.
+Pago proveedor Se define al asignar; visible al proveedor.
+Costos adicionales Opcional; visible OPS.
+Margen bruto customer_price - provider_payout - additional_costs; 
+calcular en backend.
+Estado pago PENDING, APPROVED, PAID, CANCELLED.
+Referencia Texto opcional de transferencia/folio bancario.
+CONTROL
+Un reporte aprobado puede marcar el pago como APPROVED, pero el cambio a PAID siempre debe ser una 
+accion explicita de OPS con fecha y referencia.
+14. Seguridad y prevencion de fuga de clientes
+La tecnologia no puede impedir que un proveedor que esta fisicamente con un cliente intercambie un telefono. 
+El objetivo del sistema es reducir la exposicion innecesaria, crear trazabilidad y hacer que Servinex sea el 
+centro de la relacion operativa.
+14.1 Controles tecnicos obligatorios
+ Tokens: generar al menos 32 bytes aleatorios criptograficamente seguros; enviar raw token solo en la URL y 
+almacenar SHA-256 del token en DB.
+SERVINEX   |   Especificacion funcional y tecnica
+Documento para desarrollo - MVP internoPagina 14
+ Expiracion: cada token debe tener expires_at y revoked_at.
+ Revocacion: al rechazar, reasignar, cancelar o cerrar.
+ Rate limit: aplicar limites a endpoints de partner por IP/token para evitar fuerza bruta.
+ No enumeracion: nunca usar service_order.id secuencial ni provider_id en URL publica.
+ Minimizacion: la API Partner construye una respuesta separada; no serializar la entidad completa y luego ocultar 
+en React.
+ RLS: tablas sin lectura anonima directa. El frontend no consulta datos sensibles con anon key.
+ Buckets privados y URLs firmadas.
+ Audit log para cambios de precio, payout, proveedor, cancelacion, cierre y pago.
+ Logs backend sin imprimir tokens completos, telefono del cliente o service role key.
+14.2 Controles operativos recomendados
+ El telefono del cliente no se muestra al proveedor por defecto.
+ El proveedor contacta a Servinex si existe problema de acceso o llegada.
+ La direccion exacta se libera solo tras aceptar.
+ Al cerrar, el Partner Link deja de mostrar datos operativos sensibles.
+ Acuerdo con proveedores: confidencialidad, tratamiento de datos y reglas de no captacion/no elusion revisadas 
+por asesoria juridica local.
+ Beneficios por permanencia: flujo constante, historial, pagos claros y prioridad; reducir el incentivo a saltarse a 
+Servinex.
+15. UX/UI y pantallas
+15.1 Principios
+ OPS desktop-first, responsive para tablet; proveedor mobile-first.
+ Una accion primaria por pantalla en Partner Link.
+ No usar menus laterales complejos en proveedor.
+ Colores de estado consistentes, pero nunca depender solo del color; siempre mostrar texto.
+ Confirmaciones para acciones destructivas: cancelar, reasignar, regenerar liga, marcar pagado.
+ Skeleton/loading claro y mensajes de error en lenguaje humano.
+ Autosave no necesario en MVP; evitar formularios gigantes.
+15.2 Mapa de rutas frontend
+/login
+/ops/dashboard
+/ops/services
+/ops/services/new
+/ops/services/:id
+/ops/providers
+/ops/providers/:id
+/ops/payments
+/ops/settings
+/p/:token                 # entrada proveedor
+/p/:token/accepted        # detalle operativo
+/p/:token/report          # evidencia
+/p/:token/done            # confirmacion
+SERVINEX   |   Especificacion funcional y tecnica
+Documento para desarrollo - MVP internoPagina 15
+15.3 Componentes clave
+Componente Uso
+ServiceStatusBadge Estado consistente en listas y detalle.
+ServiceTimeline Eventos de la orden.
+MoneyField MXN; valida numericos y formatea.
+ProviderPicker Seleccion simple; preparado para varios proveedores.
+WhatsAppMessageModal Preview, copiar y abrir WhatsApp.
+PhotoUploader Camara/galeria, compresion, progreso, reintento.
+ReportReview Antes/despues, texto y aprobar.
+ConfirmDialog Acciones sensibles.
+16. Estructura del repositorio
+Recomendado: monorepo simple con pnpm workspaces. Si el desarrollador prefiere dos repositorios, conservar 
+la misma separacion conceptual.
+servinex-platform/
+  apps/
+    web/                    # React + Vite
+      src/
+        app/
+        routes/
+        features/
+          auth/
+          services/
+          providers/
+          payments/
+          partner-job/
+        components/
+        lib/
+        styles/
+    api/                    # Fastify + TypeScript
+      src/
+        modules/
+          auth/
+          services/
+          assignments/
+          providers/
+          reports/
+          payments/
+          partner-access/
+        middleware/
+        lib/
+        db/
+        server.ts
+  packages/
+    shared/
+      schemas/              # Zod + tipos compartidos
+      constants/
+SERVINEX   |   Especificacion funcional y tecnica
+Documento para desarrollo - MVP internoPagina 16
+  supabase/
+    migrations/
+    seed/
+  docs/
+    api.md
+    runbook.md
+17. Variables, despliegue y dominios
+17.1 Frontend Vercel
+VITE_API_BASE_URL=https://api.servinex.mx
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_ANON_KEY=...     # solo para Auth; nunca service_role
+VITE_APP_ENV=production
+17.2 Backend Railway
+NODE_ENV=production
+PORT=3000
+APP_BASE_URL=https://app.servinex.mx
+SUPABASE_URL=...
+SUPABASE_SERVICE_ROLE_KEY=...
+SUPABASE_JWT_SECRET=...        # o verificacion JWKS segun configuracion
+TOKEN_HASH_PEPPER=...          # secreto adicional opcional
+PARTNER_TOKEN_TTL_HOURS=72
+SERVINEX_WHATSAPP_NUMBER=52...
+CORS_ORIGINS=https://app.servinex.mx
+17.3 Pipeline
+ PR -> lint + typecheck + tests.
+ Merge a main -> deploy automatico de web y API.
+ Migraciones Supabase versionadas; nunca editar schema manualmente en produccion sin migration.
+ Staging recomendado antes de produccion si el presupuesto lo permite.
+ Backups de Supabase segun plan; documentar restauracion.
+18. QA, criterios de aceptacion y Definition of Done
+18.1 Casos de aceptacion funcional
+Prueba Resultado esperado
+Crear servicio OPS guarda folio unico y campos requeridos.
+Asignar proveedor Se crea una sola asignacion activa y payout.
+Generar link La URL funciona; token no aparece en DB en texto plano.
+Mensaje WhatsApp Se copia con datos correctos y sin telefono/precio cliente.
+SERVINEX   |   Especificacion funcional y tecnica
+Documento para desarrollo - MVP internoPagina 17
+Prueba Resultado esperado
+Aceptar Proveedor cambia a ACCEPTED; refrescar no duplica 
+evento.
+Rechazar Token queda revocado y OPS puede reasignar.
+Direccion No aparece antes de aceptar; aparece despues segun reglas.
+Evidencia No permite enviar sin 1 foto antes + 1 despues + trabajo 
+realizado.
+Reporte OPS puede revisar fotos y texto.
+Cierre Revoca acceso y actualiza estado.
+Pago Solo OPS puede marcar PAID.
+Seguridad Provider endpoint nunca retorna customer_price, margin, 
+customer_phone, internal_notes.
+18.2 Pruebas tecnicas minimas
+ Unit tests: transiciones de estado, calculo de margen, token hashing/validation.
+ Integration tests API: accept/reject/report/revoke y permisos OPS.
+ E2E: flujo completo desde crear servicio hasta cerrar.
+ Test mobile: Chrome Android y Safari iPhone para Partner Link.
+ Test de fotos desde camara real de telefono.
+ Test de expiracion/revocacion de token.
+ Test de acceso directo a Supabase anon: debe fallar para tablas sensibles.
+ Test de carga duplicada y doble click: endpoints idempotentes donde aplique.
+18.3 Definition of Done
+ Funciona en produccion con HTTPS y dominios configurados.
+ No existen secretos en bundle frontend ni repositorio.
+ Migraciones y seed documentados.
+ Logs de error disponibles en Railway.
+ Manual corto para OPS: crear, asignar, copiar WhatsApp, revisar y cerrar.
+ No hay errores de consola en flujo principal.
+ Proveedor completa un servicio desde telefono sin ayuda tecnica.
+ Backups/configuracion de Supabase revisados.
+ Entrega de credenciales, repositorio y README al propietario de Servinex.
+19. Plan de construccion del MVP
+Orden Entregable Incluye
+1 Base tecnica Repos, TypeScript, Vercel/Railway, 
+Supabase, migraciones, Auth OPS.
+SERVINEX   |   Especificacion funcional y tecnica
+Documento para desarrollo - MVP internoPagina 18
+Orden Entregable Incluye
+2 Servicios OPS CRUD servicio, folio, estados, 
+dashboard basico.
+3 Proveedores y asignacion Catalogo, payout, asignacion unica.
+4 Partner Link Token seguro, accept/reject, direccion 
+post-aceptacion.
+5 Evidencia Storage privado, fotos before/after, 
+reporte.
+6 Revision/cierre Galeria OPS, approve, close, revocar 
+token.
+7 WhatsApp manual Copiar mensaje y abrir WhatsApp con 
+texto.
+8 Finanzas minimas Margen, payment status, referencia.
+9 QA/hardening Tests, rate limit, auditoria, errores, 
+mobile.
+NO SOBRECONSTRUIR
+Durante el MVP no crear chat interno, mapas avanzados, marketplace, rankings, IA, app nativa ni 
+automatizacion de WhatsApp. Validar primero que Servinex puede generar, asignar, ejecutar y cerrar 
+servicios con disciplina.
+20. Fase 2 / escalabilidad
+ Cuenta persistente de proveedor con historial, pagos y metricas.
+ OTP por SMS o autenticacion mas fuerte para Partner Portal.
+ Asignacion recomendada por zona, especialidad, score y disponibilidad.
+ Catalogo de tarifas por servicio y proveedor.
+ Garantias/retrabajos ligados al servicio original.
+ Notificaciones push/PWA y recordatorios.
+ Integracion oficial de WhatsApp cuando el volumen justifique costo y complejidad.
+ Integracion de pagos/facturacion.
+ Clientes empresariales internos con multiples sedes; sin necesidad de portal publico.
+ Dashboard de cohortes: repeticion, margen por categoria, tasa de aceptacion, SLA.
+SERVINEX   |   Especificacion funcional y tecnica
+Documento para desarrollo - MVP internoPagina 19
+Anexo A. Mensajes operativos de WhatsApp
+A.1 Nuevo servicio
+SERVINEX | NUEVO SERVICIO
+Hola, {PROVEEDOR}. Tienes un nuevo servicio disponible.
+Folio: {FOLIO}
+Servicio: {TIPO} - {RESUMEN}
+Zona: {ZONA}
+Fecha / hora: {FECHA_HORA}
+Pago por servicio: {PAGO} MXN
+Revisa y acepta aqui:
+{LINK}
+Dentro de la liga podras aceptar, consultar los datos operativos y entregar tu evidencia al finalizar.
+Por seguridad, no compartas esta liga.
+A.2 Recordatorio manual
+SERVINEX | RECORDATORIO
+Hola, {PROVEEDOR}. Tienes pendiente confirmar el servicio {FOLIO}.
+Puedes revisarlo aqui:
+{LINK}
+Si no puedes atenderlo, selecciona Rechazar para que podamos reasignarlo.
+A.3 Reporte pendiente
+SERVINEX | EVIDENCIA PENDIENTE
+Hola, {PROVEEDOR}. Para cerrar el servicio {FOLIO} necesitamos tu reporte final.
+Sube las fotos de antes y despues y describe el trabajo realizado aqui:
+{LINK}
+Anexo B. Reglas exactas de exposicion de datos
+Dato Antes de aceptar Despues de aceptar Despues de cerrar
+Folio Si Si Si
+Tipo/descripcion operativa Si Si Resumen
+Zona Si Si No necesario
+SERVINEX   |   Especificacion funcional y tecnica
+Documento para desarrollo - MVP internoPagina 20
+Dato Antes de aceptar Despues de aceptar Despues de cerrar
+Direccion exacta No Si Ocultar
+Nombre cliente No / inicial opcional Solo si operativamente 
+necesario
+Ocultar
+Telefono cliente No No por defecto No
+Pago proveedor Si Si Si/historico si se habilita
+Precio cliente No No No
+Margen Servinex No No No
+Notas internas No No No
+Evidencia No Sus propias cargas Confirmacion solamente
+Anexo C. Checklist de entrega del desarrollador
+ Repositorio Git bajo cuenta/control de Servinex.
+ README con instalacion local, comandos, variables y deploy.
+ Archivo .env.example sin secretos.
+ Migraciones Supabase versionadas.
+ Documentacion de endpoints y roles.
+ Cuenta owner de Supabase, Railway y Vercel en poder de Servinex.
+ Dominios app.servinex.mx y api.servinex.mx documentados.
+ Usuario inicial OPS creado y procedimiento para crear otros.
+ Pruebas automatizadas principales pasando.
+ Backup/export de configuracion relevante y runbook basico de incidentes.
+ Sin dependencias de cuentas personales del desarrollador para operar produccion.
+CRITERIO FINAL DE EXITO
+El MVP esta bien hecho si una persona de OPS puede recibir un lead, crear y asignar un servicio, enviar 
+manualmente una liga por WhatsApp, el proveedor puede aceptar y reportar desde su telefono, y OPS 
+puede revisar, cerrar y controlar el pago sin exponer datos comerciales al proveedor.
